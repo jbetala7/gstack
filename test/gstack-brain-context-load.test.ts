@@ -32,7 +32,7 @@ function writeFakeGbrain(binDir: string): void {
     writeFileSync(
       join(binDir, "gbrain.cmd"),
       "@echo off\r\nif \"%1\"==\"--version\" (\r\n  echo gbrain 0.test\r\n) else (\r\n  echo fake gbrain %*\r\n)\r\n",
-      "utf-8"
+      "utf-8",
     );
     return;
   }
@@ -47,7 +47,7 @@ else
   echo "fake gbrain $*"
 fi
 `,
-    "utf-8"
+    "utf-8",
   );
   chmodSync(fakeBin, 0o755);
 }

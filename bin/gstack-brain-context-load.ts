@@ -36,7 +36,7 @@
 
 import { existsSync, readFileSync, statSync, readdirSync } from "fs";
 import { join, dirname, basename, resolve } from "path";
-import { execFileSync, spawnSync } from "child_process";
+import { spawnSync, type SpawnSyncReturns } from "child_process";
 import { homedir } from "os";
 
 import { parseSkillManifest, type GbrainManifest, type GbrainManifestQuery, withErrorContext } from "../lib/gstack-memory-helpers";
@@ -190,16 +190,10 @@ function resolveSkillFile(args: CliArgs): string | null {
 
 // ── Dispatchers ────────────────────────────────────────────────────────────
 
-function gbrainAvailable(): boolean {
-  try {
-    execFileSync("gbrain", ["--version"], {
-      stdio: "ignore",
-      timeout: MCP_TIMEOUT_MS,
-    });
-    return true;
-  } catch {
-    return false;
-  }
+function gbrainFailureReason(result: SpawnSyncReturns<string>, command: string): string {
+  const error = result.error as (Error & { code?: string }) | undefined;
+  if (error?.code === "ENOENT") return "gbrain CLI missing";
+  return error?.message || `gbrain ${command} exited ${result.status}`;
 }
 
 function dispatchVector(q: GbrainManifestQuery, args: CliArgs): QueryResult {
@@ -215,10 +209,6 @@ function dispatchVector(q: GbrainManifestQuery, args: CliArgs): QueryResult {
       reason: `template vars unresolved: ${unresolved.join(",")}`,
     };
   }
-  if (!gbrainAvailable()) {
-    return { query: q, ok: false, rendered: "", bytes: 0, duration_ms: Date.now() - t0, reason: "gbrain CLI missing" };
-  }
-
   const limit = q.limit ?? args.limit;
   const result = spawnSync("gbrain", ["query", query, "--limit", String(limit), "--format", "compact"], {
     encoding: "utf-8",
@@ -232,7 +222,7 @@ function dispatchVector(q: GbrainManifestQuery, args: CliArgs): QueryResult {
       rendered: "",
       bytes: 0,
       duration_ms: Date.now() - t0,
-      reason: result.error?.message || `gbrain query exited ${result.status}`,
+      reason: gbrainFailureReason(result, "query"),
     };
   }
 
@@ -242,9 +232,6 @@ function dispatchVector(q: GbrainManifestQuery, args: CliArgs): QueryResult {
 
 function dispatchList(q: GbrainManifestQuery, args: CliArgs): QueryResult {
   const t0 = Date.now();
-  if (!gbrainAvailable()) {
-    return { query: q, ok: false, rendered: "", bytes: 0, duration_ms: Date.now() - t0, reason: "gbrain CLI missing" };
-  }
   const limit = q.limit ?? args.limit;
   const cliArgs: string[] = ["list_pages", "--limit", String(limit)];
   if (q.sort) cliArgs.push("--sort", q.sort);
@@ -262,7 +249,7 @@ function dispatchList(q: GbrainManifestQuery, args: CliArgs): QueryResult {
       rendered: "",
       bytes: 0,
       duration_ms: Date.now() - t0,
-      reason: result.error?.message || `gbrain list_pages exited ${result.status}`,
+      reason: gbrainFailureReason(result, "list_pages"),
     };
   }
   const rendered = wrapDatamarked(q.render_as, capBody(result.stdout));
